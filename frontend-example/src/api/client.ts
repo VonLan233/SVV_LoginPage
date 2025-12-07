@@ -48,9 +48,9 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Response interceptor: Handle 401 errors (optional, uncomment to enable)
+// Response interceptor: Handle 401 errors
 // Automatically logs out user and redirects to login on 401 Unauthorized
-/*
+// This ensures sessions are invalidated when user is deleted or token becomes invalid
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -62,7 +62,6 @@ apiClient.interceptors.response.use(
     return Promise.reject(error)
   }
 )
-*/
 
 export { apiClient }
 export default apiClient

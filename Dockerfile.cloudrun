@@ -1,0 +1,60 @@
+# ==================================
+# Stage 1: Build Frontend
+# ==================================
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Copy all frontend files
+COPY frontend-example/ ./
+
+# Install dependencies
+RUN npm install
+
+# Build frontend for production
+# Cloud Run URL will be set at runtime
+RUN npm run build
+
+# ==================================
+# Stage 2: Setup Backend
+# ==================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    libffi-dev \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy backend requirements
+COPY backend/requirements.txt ./backend/
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r backend/requirements.txt
+
+# Install cloud-sql-python-connector for Cloud SQL
+RUN pip install --no-cache-dir cloud-sql-python-connector[pg8000] pg8000
+
+# Copy backend source
+COPY backend/ ./backend/
+COPY example_app.py ./
+COPY migrations/ ./migrations/
+
+# Copy built frontend from previous stage
+COPY --from=frontend-builder /app/frontend/dist ./static
+
+# Expose port (Cloud Run uses PORT env var)
+EXPOSE 8080
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+
+# Run the application
+# Cloud Run sets PORT env var, we need to use it
+CMD ["sh", "-c", "python example_app.py"]

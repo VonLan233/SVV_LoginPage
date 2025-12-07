@@ -34,6 +34,10 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+# Dummy hash for timing attack prevention (pre-computed bcrypt hash)
+DUMMY_HASH = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.VTtYA1S1qKhWdW"
+
+
 def authenticate_user(db: Session, username: str, password: str):
     """Authenticate a user with username and password
 
@@ -46,9 +50,13 @@ def authenticate_user(db: Session, username: str, password: str):
         User object if authentication succeeds, False otherwise
     """
     user = db.query(User).filter(User.username == username).first()
-    if not user:
-        return False
-    if not verify_password(password, user.hashed_password):
+
+    # Always perform password verification to prevent timing attacks
+    # Use dummy hash when user doesn't exist to maintain consistent response time
+    hash_to_verify = user.hashed_password if user else DUMMY_HASH
+    password_valid = verify_password(password, hash_to_verify)
+
+    if not user or not password_valid:
         return False
     return user
 
@@ -78,6 +86,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 
     Dependency function that extracts and validates JWT token,
     then retrieves the corresponding user from database.
+    Also validates token_version to ensure token is still valid after password change.
 
     Args:
         token: JWT token from Authorization header
@@ -87,7 +96,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         User object
 
     Raises:
-        HTTPException: If token is invalid or user not found
+        HTTPException: If token is invalid, user not found, or token_version mismatch
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -99,12 +108,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
+        token_version: int = payload.get("token_version", 0)
     except JWTError:
         raise credentials_exception
 
     user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None:
         raise credentials_exception
+
+    # Validate token_version to invalidate tokens after password change
+    if user.token_version != token_version:
+        raise credentials_exception
+
     return user
 
 

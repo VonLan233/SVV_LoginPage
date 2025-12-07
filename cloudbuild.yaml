@@ -1,0 +1,67 @@
+# Cloud Build configuration for SVV-LoginPage
+# This builds and deploys the application to Cloud Run
+
+steps:
+  # Step 1: Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/svv-repo/svv-app:$COMMIT_SHA'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/svv-repo/svv-app:latest'
+      - '-f'
+      - 'Dockerfile.cloudrun'
+      - '.'
+
+  # Step 2: Push the image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/svv-repo/svv-app:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/svv-repo/svv-app:latest'
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'svv-app'
+      - '--image'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/svv-repo/svv-app:$COMMIT_SHA'
+      - '--region'
+      - 'asia-east1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--add-cloudsql-instances'
+      - '$PROJECT_ID:asia-east1:svv-db'
+      - '--set-env-vars'
+      - 'DATABASE_URL=postgresql+pg8000://svv_user:${_DB_PASSWORD}@/svv_auth?host=/cloudsql/$PROJECT_ID:asia-east1:svv-db'
+      - '--set-secrets'
+      - 'SECRET_KEY=jwt-secret:latest'
+      - '--memory'
+      - '512Mi'
+      - '--cpu'
+      - '1'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '10'
+
+# Use substitutions for sensitive values
+substitutions:
+  _DB_PASSWORD: ''  # Set via --substitutions flag
+
+# Store images in Artifact Registry
+images:
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/svv-repo/svv-app:$COMMIT_SHA'
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/svv-repo/svv-app:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

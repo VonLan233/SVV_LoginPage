@@ -28,9 +28,18 @@ app = FastAPI(
 )
 
 # Configure CORS
+# Allow Cloud Run URL and local dev servers
+cors_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+# Add Cloud Run URL if set
+if os.environ.get("CLOUD_RUN_URL"):
+    cors_origins.append(os.environ.get("CLOUD_RUN_URL"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # React dev servers
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -109,9 +118,11 @@ if __name__ == "__main__":
     print("="*60 + "\n")
 
     # Run the application
+    # Cloud Run sets PORT env var
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=8000,
+        port=port,
         log_level="info"
     )

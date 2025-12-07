@@ -35,8 +35,8 @@ import { useToast } from '@/hooks/use-toast'
 
 // Form validation schema
 const loginSchema = z.object({
-  username: z.string().min(1, 'Username is required'),
-  password: z.string().min(1, 'Password is required'),
+  username: z.string().min(1, 'Username is required').max(100, 'Username is too long'),
+  password: z.string().min(1, 'Password is required').max(128, 'Password is too long'),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>

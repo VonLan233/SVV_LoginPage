@@ -25,8 +25,8 @@ def validate_username(username: str) -> str:
         raise ValueError('Username can only contain letters (a-z, A-Z), numbers (0-9), and underscores (_)')
     if len(username) < 3:
         raise ValueError('Username must be at least 3 characters')
-    if len(username) > 50:
-        raise ValueError('Username must be at most 50 characters')
+    if len(username) > 100:
+        raise ValueError('Username must be at most 100 characters')
     return username
 
 
@@ -71,6 +71,13 @@ class UserBase(BaseModel):
     def username_valid(cls, v: str) -> str:
         return validate_username(v)
 
+    @field_validator('email')
+    @classmethod
+    def email_length_valid(cls, v: str) -> str:
+        if len(v) > 255:
+            raise ValueError('Email must be at most 255 characters')
+        return v
+
 
 class UserCreate(UserBase):
     """Schema for user registration
@@ -106,6 +113,13 @@ class UserUpdate(BaseModel):
     def username_valid(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             return validate_username(v)
+        return v
+
+    @field_validator('email')
+    @classmethod
+    def email_length_valid(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > 255:
+            raise ValueError('Email must be at most 255 characters')
         return v
 
 

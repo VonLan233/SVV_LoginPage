@@ -8,7 +8,7 @@ from typing import Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, DataError, SQLAlchemyError
 
 from backend.auth import authenticate_user, create_access_token, get_current_active_user, get_password_hash
 from backend.config import settings
@@ -30,10 +30,15 @@ MAX_TRACKED_IPS = 10000  # Limit memory usage
 
 
 def get_client_ip(request: Request) -> str:
-    """Get client IP address from request"""
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+    """Get client IP address from request
+
+    Note: X-Forwarded-For header is not trusted as it can be spoofed.
+    Only the direct client IP is used for rate limiting to prevent bypass attacks.
+    If running behind a trusted reverse proxy, configure the proxy to set
+    a trusted header and update this function accordingly.
+    """
+    # Don't trust X-Forwarded-For header as it can be spoofed
+    # Use only the direct client connection IP for rate limiting
     return request.client.host if request.client else "unknown"
 
 
@@ -84,7 +89,12 @@ def record_failed_login(identifier: str):
 
 
 def clear_failed_login(identifier: str):
-    """Clear failed login attempts after successful login"""
+    """Clear failed login attempts after lockout expires
+
+    Note: This should NOT be called on successful login to prevent
+    attackers from resetting the counter with a valid credential.
+    The counter is only cleared when the lockout period expires.
+    """
     if identifier in failed_login_attempts:
         del failed_login_attempts[identifier]
 
@@ -121,7 +131,15 @@ async def login_for_access_token(
             detail="Too many login attempts, please try again later",
         )
     
-    user = authenticate_user(db, form_data.username, form_data.password)
+    try:
+        user = authenticate_user(db, form_data.username, form_data.password)
+    except SQLAlchemyError:
+        # Log error internally
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error during authentication"
+        )
+
     if not user:
         record_failed_login(client_ip)
         raise HTTPException(
@@ -136,13 +154,15 @@ async def login_for_access_token(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is inactive. Please contact administrator.",
         )
-    
-    # Clear failed attempts on successful login
-    clear_failed_login(client_ip)
-    
+
+    # Note: Do NOT clear failed login attempts on successful login
+    # This prevents attackers from resetting the counter by using a valid credential
+    # The counter is automatically cleared when the lockout period expires
+
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
-        data={"sub": str(user.id)}, expires_delta=access_token_expires
+        data={"sub": str(user.id), "token_version": user.token_version},
+        expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -217,6 +237,24 @@ async def register_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Registration failed due to constraint violation"
             )
+    except DataError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Data validation failed: Value too long or invalid format"
+        )
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred"
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred"
+        )
     
     return db_user
 

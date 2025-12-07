@@ -33,21 +33,51 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 
 // Form validation schema
+// Use superRefine for password validation to collect all errors at once
 const registerSchema = z.object({
   username: z.string()
     .min(3, 'Username must be at least 3 characters')
-    .max(50, 'Username must be at most 50 characters')
+    .max(100, 'Username must be at most 100 characters')
     .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters (a-z, A-Z), numbers (0-9), and underscores (_)'),
-  email: z.string().email('Please enter a valid email address'),
+  email: z.string()
+    .min(1, 'Email is required')
+    .email('Please enter a valid email address')
+    .max(255, 'Email must be at most 255 characters'),
   password: z.string()
-    .min(8, 'Password must be at least 8 characters')
-    .max(128, 'Password must be at most 128 characters')
-    .regex(/^[a-zA-Z0-9!@#$%^&*]+$/, 'Password contains illegal characters. Only letters (a-z, A-Z), numbers (0-9), and special characters (!@#$%^&*) are allowed')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one digit')
-    .regex(/[!@#$%^&*]/, 'Password must contain at least one special character (!@#$%^&*)'),
-  confirmPassword: z.string().min(8, 'Password must be at least 8 characters'),
+    .min(1, 'Password is required')
+    .superRefine((password, ctx) => {
+      const errors: string[] = []
+
+      if (password.length < 8) {
+        errors.push('be at least 8 characters')
+      }
+      if (password.length > 128) {
+        errors.push('be at most 128 characters')
+      }
+      if (!/^[a-zA-Z0-9!@#$%^&*]*$/.test(password)) {
+        errors.push('only contain letters, numbers, and special characters (!@#$%^&*)')
+      }
+      if (!/[A-Z]/.test(password)) {
+        errors.push('contain at least one uppercase letter')
+      }
+      if (!/[a-z]/.test(password)) {
+        errors.push('contain at least one lowercase letter')
+      }
+      if (!/[0-9]/.test(password)) {
+        errors.push('contain at least one digit')
+      }
+      if (!/[!@#$%^&*]/.test(password)) {
+        errors.push('contain at least one special character (!@#$%^&*)')
+      }
+
+      if (errors.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Password must: ${errors.join('; ')}`,
+        })
+      }
+    }),
+  confirmPassword: z.string().min(1, 'Please confirm your password'),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'Passwords do not match',
   path: ['confirmPassword'],

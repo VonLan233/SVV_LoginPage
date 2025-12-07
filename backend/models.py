@@ -22,6 +22,7 @@ class User(Base):
         is_superuser: Whether the user has superuser privileges
         created_at: Timestamp of account creation
         updated_at: Timestamp of last update
+        token_version: Incremented on password change to invalidate existing tokens
     """
     __tablename__ = "users"
 
@@ -33,6 +34,7 @@ class User(Base):
     is_superuser = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    token_version = Column(Integer, default=0, nullable=False)
 
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}')>"
