@@ -10,8 +10,18 @@ CREATE TABLE IF NOT EXISTS users (
     is_active BOOLEAN DEFAULT TRUE,
     is_superuser BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    token_version INTEGER DEFAULT 0 NOT NULL
 );
+
+-- Migration: Add token_version column if not exists (for existing databases)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'users' AND column_name = 'token_version') THEN
+        ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0 NOT NULL;
+    END IF;
+END $$;
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -49,3 +59,4 @@ COMMENT ON COLUMN users.is_active IS 'Whether the account is active';
 COMMENT ON COLUMN users.is_superuser IS 'Whether the user has admin privileges';
 COMMENT ON COLUMN users.created_at IS 'Timestamp when user was created';
 COMMENT ON COLUMN users.updated_at IS 'Timestamp when user was last updated';
+COMMENT ON COLUMN users.token_version IS 'Token version for invalidating JWTs after password change';
