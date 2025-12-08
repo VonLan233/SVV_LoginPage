@@ -6,7 +6,7 @@ JWT-based authentication with bcrypt password hashing
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request, Cookie
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -20,8 +20,41 @@ from backend.schemas import TokenData
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# OAuth2 authentication scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token")
+# OAuth2 authentication scheme (optional - also support cookie-based auth)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token", auto_error=False)
+
+
+def get_token_from_cookie_or_header(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    access_token: Optional[str] = Cookie(default=None)
+) -> str:
+    """Extract JWT token from Authorization header or HttpOnly cookie
+
+    Prioritizes cookie-based auth (more secure against XSS) over header-based.
+
+    Args:
+        request: FastAPI request object
+        token: Token from Authorization header (optional)
+        access_token: Token from HttpOnly cookie (optional)
+
+    Returns:
+        JWT token string
+
+    Raises:
+        HTTPException: If no valid token found
+    """
+    # Prefer cookie-based auth (HttpOnly cookies are more secure)
+    if access_token:
+        return access_token
+    # Fall back to Authorization header
+    if token:
+        return token
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -81,7 +114,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+async def get_current_user(token: str = Depends(get_token_from_cookie_or_header), db: Session = Depends(get_db)) -> User:
     """Get current user from JWT token
 
     Dependency function that extracts and validates JWT token,

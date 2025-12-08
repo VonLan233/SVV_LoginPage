@@ -1,13 +1,16 @@
 /**
  * SVV-LoginPage API Client
  *
- * Axios HTTP client with JWT authentication interceptor.
+ * Axios HTTP client with cookie-based authentication.
+ *
+ * Security: JWT token is stored in HttpOnly cookie (set by backend),
+ * NOT in localStorage, to prevent XSS attacks from stealing tokens.
  *
  * Features:
- * - Automatic JWT token injection in Authorization header
+ * - Cookie-based authentication (withCredentials: true)
  * - Configurable base URL via environment variable
  * - FormData Content-Type handling
- * - Optional 401 response interceptor (commented out)
+ * - 401 response interceptor for session invalidation
  *
  * Environment Variables:
  * - VITE_API_URL: Backend API base URL (defaults to http://localhost:8000)
@@ -27,16 +30,14 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Enable sending cookies with cross-origin requests
+  // Required for HttpOnly cookie authentication
+  withCredentials: true,
 })
 
-// Request interceptor: Add JWT token to Authorization header
+// Request interceptor: Handle FormData Content-Type
 apiClient.interceptors.request.use(
   (config) => {
-    const token = useAuthStore.getState().token
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-
     // If request data is FormData, remove Content-Type to let browser set it automatically
     // (including multipart boundary)
     if (config.data instanceof FormData) {

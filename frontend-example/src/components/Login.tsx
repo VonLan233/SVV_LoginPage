@@ -53,7 +53,7 @@ const LoginPage = ({ redirectPath = '/dashboard', onLoginSuccess }: LoginPagePro
   const [showWarning, setShowWarning] = useState(false)
   const [isLockedOut, setIsLockedOut] = useState(false)
   const [searchParams] = useSearchParams()
-  const { setToken, login } = useAuthStore()
+  const { login } = useAuthStore()
   const navigate = useNavigate()
   const { toast } = useToast()
 
@@ -67,11 +67,10 @@ const LoginPage = ({ redirectPath = '/dashboard', onLoginSuccess }: LoginPagePro
 
   const loginMutation = useMutation({
     mutationFn: authApi.login,
-    onSuccess: async (data) => {
+    onSuccess: async () => {
       try {
-        // Save JWT token
-        const token = data.access_token
-        setToken(token)
+        // Token is now stored in HttpOnly cookie by the backend
+        // No need to store it in localStorage (prevents XSS attacks)
 
         // Fetch user information
         const userInfo = await authApi.getCurrentUser()

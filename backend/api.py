@@ -4,8 +4,8 @@ Authentication endpoints for login, register, and user management
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Dict
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from typing import Dict, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, DataError, SQLAlchemyError
@@ -22,24 +22,13 @@ router = APIRouter(
     responses={401: {"description": "Unauthorized"}},
 )
 
-# Rate limiting for login attempts by IP address
+# Rate limiting for login attempts by username (not IP)
+# This prevents attackers from bypassing lockout by rotating IPs
+# and ensures each account is protected individually
 failed_login_attempts: Dict[str, Dict] = {}
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION_MINUTES = 1
-MAX_TRACKED_IPS = 10000  # Limit memory usage
-
-
-def get_client_ip(request: Request) -> str:
-    """Get client IP address from request
-
-    Note: X-Forwarded-For header is not trusted as it can be spoofed.
-    Only the direct client IP is used for rate limiting to prevent bypass attacks.
-    If running behind a trusted reverse proxy, configure the proxy to set
-    a trusted header and update this function accordingly.
-    """
-    # Don't trust X-Forwarded-For header as it can be spoofed
-    # Use only the direct client connection IP for rate limiting
-    return request.client.host if request.client else "unknown"
+MAX_TRACKED_USERS = 10000  # Limit memory usage
 
 
 def cleanup_expired_attempts():
@@ -54,12 +43,12 @@ def cleanup_expired_attempts():
         del failed_login_attempts[key]
     
     # If still too many entries, remove oldest ones
-    if len(failed_login_attempts) > MAX_TRACKED_IPS:
+    if len(failed_login_attempts) > MAX_TRACKED_USERS:
         # Remove entries that don't have active lockouts
         for identifier in list(failed_login_attempts.keys()):
             if not failed_login_attempts[identifier].get("locked_until"):
                 del failed_login_attempts[identifier]
-            if len(failed_login_attempts) <= MAX_TRACKED_IPS:
+            if len(failed_login_attempts) <= MAX_TRACKED_USERS:
                 break
 
 
@@ -101,7 +90,7 @@ def clear_failed_login(identifier: str):
 
 @router.post("/token", response_model=Token)
 async def login_for_access_token(
-    request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -109,10 +98,10 @@ async def login_for_access_token(
     Login and get JWT access token
 
     OAuth2 compatible token login, returns JWT access token.
-    Use the token in subsequent requests with Authorization: Bearer {token}
+    Token is also set as HttpOnly cookie for security (prevents XSS theft).
 
     Args:
-        request: FastAPI request object
+        response: FastAPI response object for setting cookies
         form_data: OAuth2 form with username and password
         db: Database session
 
@@ -120,19 +109,20 @@ async def login_for_access_token(
         Token object with access_token and token_type
 
     Raises:
-        HTTPException: If credentials are invalid or IP is locked
+        HTTPException: If credentials are invalid or username is locked
     """
-    client_ip = get_client_ip(request)
-    
-    # Check rate limiting by IP
-    if check_login_lockout(client_ip):
+    username = form_data.username
+
+    # Check rate limiting by username (not IP)
+    # This ensures each account is protected individually
+    if check_login_lockout(username):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts, please try again later",
         )
-    
+
     try:
-        user = authenticate_user(db, form_data.username, form_data.password)
+        user = authenticate_user(db, username, form_data.password)
     except SQLAlchemyError:
         # Log error internally
         raise HTTPException(
@@ -141,13 +131,13 @@ async def login_for_access_token(
         )
 
     if not user:
-        record_failed_login(client_ip)
+        record_failed_login(username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Check if user account is active before issuing token
     if not user.is_active:
         raise HTTPException(
@@ -164,7 +154,32 @@ async def login_for_access_token(
         data={"sub": str(user.id), "token_version": user.token_version},
         expires_delta=access_token_expires
     )
+
+    # Set token as HttpOnly cookie to prevent XSS attacks
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax",
+        max_age=settings.access_token_expire_minutes * 60
+    )
+
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """
+    Logout and clear authentication cookie
+
+    Clears the HttpOnly cookie containing the JWT token.
+
+    Returns:
+        Success message
+    """
+    response.delete_cookie(key="access_token")
+    return {"message": "Successfully logged out"}
 
 
 @router.post("/register", response_model=UserResponse)

@@ -23,10 +23,9 @@ class Settings(BaseSettings):
     )
 
     # JWT Configuration
-    secret_key: str = os.getenv(
-        "SECRET_KEY",
-        "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
-    )
+    # SECRET_KEY must be set via environment variable in production
+    # No default value to prevent accidental use of hardcoded key
+    secret_key: str = os.getenv("SECRET_KEY", "")
     algorithm: str = os.getenv("ALGORITHM", "HS256")
     access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
@@ -36,6 +35,14 @@ class Settings(BaseSettings):
     debug: bool = os.getenv("DEBUG", "False").lower() == "true"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.secret_key:
+            raise ValueError(
+                "SECRET_KEY environment variable is required. "
+                "Generate one with: openssl rand -hex 32"
+            )
 
 
 settings = Settings()

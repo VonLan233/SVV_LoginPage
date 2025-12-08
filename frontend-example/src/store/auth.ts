@@ -1,29 +1,29 @@
 /**
  * SVV-LoginPage Authentication Store
  *
- * Zustand store for managing authentication state with localStorage persistence.
+ * Zustand store for managing authentication state.
+ *
+ * Security: JWT token is stored in HttpOnly cookie (set by backend),
+ * NOT in localStorage, to prevent XSS attacks from stealing tokens.
  *
  * Features:
- * - JWT token storage
- * - User information storage
+ * - User information storage (non-sensitive data only)
  * - Authentication state tracking
- * - Persistent storage via localStorage
+ * - Persistent user info via localStorage (token is in HttpOnly cookie)
  *
  * State:
- * - token: JWT access token string
  * - user: User object (id, username, email)
  * - isAuthenticated: Boolean flag for auth status
  *
  * Actions:
- * - setToken: Store JWT token
  * - login: Set user info and mark as authenticated
  * - logout: Clear all auth state
  * - updateUser: Update user information
  *
- * Storage Key: 'auth-storage' in localStorage
+ * Storage Key: 'auth-storage' in localStorage (user info only, NOT token)
  *
  * Usage:
- *   const { token, user, isAuthenticated, login, logout } = useAuthStore()
+ *   const { user, isAuthenticated, login, logout } = useAuthStore()
  */
 
 import { create } from 'zustand'
@@ -38,14 +38,10 @@ interface User {
 }
 
 interface AuthState {
-  /** JWT access token */
-  token: string | null
   /** Current user information */
   user: User | null
   /** Whether user is authenticated */
   isAuthenticated: boolean
-  /** Store JWT token */
-  setToken: (token: string) => void
   /** Log in user with user info */
   login: (user: User) => void
   /** Log out user and clear all auth state */
@@ -57,20 +53,17 @@ interface AuthState {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      token: null,
       user: null,
       isAuthenticated: false,
 
-      setToken: (token) => set({ token }),
-
       login: (user) => set({ user, isAuthenticated: true }),
 
-      logout: () => set({ token: null, user: null, isAuthenticated: false }),
+      logout: () => set({ user: null, isAuthenticated: false }),
 
       updateUser: (user) => set({ user }),
     }),
     {
-      name: 'auth-storage', // localStorage key
+      name: 'auth-storage', // localStorage key (stores user info only, NOT token)
     }
   )
 )
