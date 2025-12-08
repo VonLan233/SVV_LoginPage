@@ -54,7 +54,10 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Don't redirect on login/register failures - those 401s are expected
+    const isAuthEndpoint = error.config?.url?.includes('/api/auth/token')
+
+    if (error.response?.status === 401 && !isAuthEndpoint) {
       // Clear auth state and redirect to login
       useAuthStore.getState().logout()
       window.location.href = '/login'
