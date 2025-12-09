@@ -25,7 +25,7 @@ import { useForm } from 'react-hook-form'
 import { useMutation } from '@tanstack/react-query'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Eye, EyeOff, Check, X } from 'lucide-react'
+import { Eye, EyeOff, Check } from 'lucide-react'
 
 import { authApi } from '../api/auth'
 import { Button } from '@/components/ui/button'
