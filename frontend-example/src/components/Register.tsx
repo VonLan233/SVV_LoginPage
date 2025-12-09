@@ -19,12 +19,13 @@
  * - shadcn/ui: UI components (Button, Input, Label)
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useMutation } from '@tanstack/react-query'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Eye, EyeOff, Check, X } from 'lucide-react'
 
 import { authApi } from '../api/auth'
 import { Button } from '@/components/ui/button'
@@ -94,16 +95,31 @@ interface RegisterPageProps {
 
 const RegisterPage = ({ redirectPath = '/login', onRegisterSuccess }: RegisterPageProps) => {
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const navigate = useNavigate()
   const { toast } = useToast()
 
   const {
     register,
     handleSubmit,
+    watch,
+    trigger,
     formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
+    mode: 'onChange', // Enable real-time validation
   })
+
+  const password = watch('password', '')
+  const confirmPassword = watch('confirmPassword', '')
+
+  // Trigger confirm password validation when password changes
+  useEffect(() => {
+    if (confirmPassword) {
+      trigger('confirmPassword')
+    }
+  }, [password, trigger, confirmPassword])
 
   const registerMutation = useMutation({
     mutationFn: (data: Omit<RegisterFormValues, 'confirmPassword'>) => {
@@ -195,20 +211,55 @@ const RegisterPage = ({ redirectPath = '/login', onRegisterSuccess }: RegisterPa
 
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Enter your password"
-              {...register('password')}
-            />
-            <p className="text-xs text-muted-foreground">
-              MUST contain at least:<br/> 
-              one uppercase letter<br/>
-              one lowercase letter <br />
-              one digit <br />
-              one special character (!@#$%^&*) <br />
-              and be at least 8 characters long
-            </p>
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Enter your password"
+                {...register('password')}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
+            
+            {/* Real-time password rules checklist */}
+            <div className="space-y-1 rounded-md bg-muted/50 p-3 text-xs">
+              <p className="font-medium mb-2">Password must contain:</p>
+              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                <div className={`flex items-center gap-2 ${password.length >= 8 && password.length <= 128 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                  {password.length >= 8 && password.length <= 128 ? <Check className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border border-current" />}
+                  <span>8-128 characters</span>
+                </div>
+                <div className={`flex items-center gap-2 ${/[A-Z]/.test(password) ? 'text-green-600' : 'text-muted-foreground'}`}>
+                  {/[A-Z]/.test(password) ? <Check className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border border-current" />}
+                  <span>Uppercase letter</span>
+                </div>
+                <div className={`flex items-center gap-2 ${/[a-z]/.test(password) ? 'text-green-600' : 'text-muted-foreground'}`}>
+                  {/[a-z]/.test(password) ? <Check className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border border-current" />}
+                  <span>Lowercase letter</span>
+                </div>
+                <div className={`flex items-center gap-2 ${/[0-9]/.test(password) ? 'text-green-600' : 'text-muted-foreground'}`}>
+                  {/[0-9]/.test(password) ? <Check className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border border-current" />}
+                  <span>Number</span>
+                </div>
+                <div className={`flex items-center gap-2 ${/[!@#$%^&*]/.test(password) ? 'text-green-600' : 'text-muted-foreground'}`}>
+                  {/[!@#$%^&*]/.test(password) ? <Check className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border border-current" />}
+                  <span>Special char (!@#$%^&*)</span>
+                </div>
+              </div>
+            </div>
+
             {errors.password && (
               <p className="text-sm text-destructive">{errors.password.message}</p>
             )}
@@ -216,12 +267,27 @@ const RegisterPage = ({ redirectPath = '/login', onRegisterSuccess }: RegisterPa
 
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              placeholder="Confirm your password"
-              {...register('confirmPassword')}
-            />
+            <div className="relative">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Confirm your password"
+                {...register('confirmPassword')}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
             {errors.confirmPassword && (
               <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
             )}
