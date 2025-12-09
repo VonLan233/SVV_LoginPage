@@ -51,7 +51,9 @@ interface LoginPageProps {
 const LoginPage = ({ redirectPath = '/dashboard', onLoginSuccess }: LoginPageProps) => {
   const [isLoading, setIsLoading] = useState(false)
   const [showWarning, setShowWarning] = useState(false)
-  const [isLockedOut, setIsLockedOut] = useState(false)
+  const [isLockedOut, setIsLockedOut] = useState(() => {
+    return sessionStorage.getItem('auth_lockout') === 'true'
+  })
   const [searchParams] = useSearchParams()
   const { login } = useAuthStore()
   const navigate = useNavigate()
@@ -105,22 +107,39 @@ const LoginPage = ({ redirectPath = '/dashboard', onLoginSuccess }: LoginPagePro
     onError: (error: any) => {
       console.error('Login error:', error)
       const status = error.response?.status
+      const data = error.response?.data
       
       // Handle 429 (rate limited) status code
       if (status === 429) {
         setIsLockedOut(true)
         setShowWarning(false)
+        // Persist lockout state to session storage
+        sessionStorage.setItem('auth_lockout', 'true')
+        
         toast({
           variant: 'destructive',
           title: 'Account locked',
-          description: error.response?.data?.detail || 'Too many login attempts. Please try again later.',
+          description: data?.detail || 'Too many login attempts. Please try again later.',
+        })
+      } else if (status >= 500) {
+        toast({
+          variant: 'destructive',
+          title: 'Server Error',
+          description: 'An internal server error occurred. Please try again later.',
+        })
+      } else if (!error.response) {
+        // Network error
+        toast({
+          variant: 'destructive',
+          title: 'Network Error',
+          description: 'Unable to connect to the server. Please check your internet connection.',
         })
       } else {
         setShowWarning(true)
         toast({
           variant: 'destructive',
           title: 'Login failed',
-          description: error.response?.data?.detail || 'Incorrect username or password',
+          description: data?.detail || 'Incorrect username or password',
         })
       }
       setIsLoading(false)

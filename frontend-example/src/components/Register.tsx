@@ -130,10 +130,22 @@ const RegisterPage = ({ redirectPath = '/login', onRegisterSuccess }: RegisterPa
     },
     onError: (error: any) => {
       console.error('Registration error:', error)
+      const status = error.response?.status
+      const data = error.response?.data
+
+      let description = 'An error occurred during registration'
+      if (status >= 500) {
+        description = 'An internal server error occurred. Please try again later.'
+      } else if (!error.response) {
+        description = 'Unable to connect to the server. Please check your internet connection.'
+      } else if (data?.detail) {
+        description = data.detail
+      }
+
       toast({
         variant: 'destructive',
         title: 'Registration failed',
-        description: error.response?.data?.detail || 'An error occurred during registration',
+        description: description,
       })
       setIsLoading(false)
     },
