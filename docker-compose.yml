@@ -43,6 +43,10 @@ services:
       APP_HOST: 0.0.0.0
       APP_PORT: 8000
       DEBUG: ${DEBUG:-False}
+
+      # Gunicorn Multi-worker Settings
+      # Default: 2 * CPU cores + 1, override with GUNICORN_WORKERS
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-}
     ports:
       - "${APP_PORT:-8000}:8000"
     depends_on:

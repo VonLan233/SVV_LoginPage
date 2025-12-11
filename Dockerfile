@@ -40,12 +40,13 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Copy backend source
 COPY backend/ ./backend/
 COPY example_app.py ./
+COPY gunicorn.conf.py ./
 COPY migrations/ ./migrations/
 
 # Copy built frontend from previous stage
 COPY --from=frontend-builder /app/frontend/dist ./static
 
-# Create a startup script
+# Create a startup script with gunicorn multi-worker support
 RUN echo '#!/bin/bash\n\
 echo "================================="\n\
 echo "Starting SVV-LoginPage Application"\n\
@@ -54,8 +55,11 @@ echo ""\n\
 echo "Waiting for database..."\n\
 sleep 5\n\
 echo ""\n\
-echo "Initializing application..."\n\
-python example_app.py\n\
+echo "Initializing database tables..."\n\
+python -c "from backend.database import init_db; init_db()"\n\
+echo ""\n\
+echo "Starting Gunicorn with multiple workers..."\n\
+exec gunicorn example_app:app -c gunicorn.conf.py\n\
 ' > /app/start.sh && chmod +x /app/start.sh
 
 # Expose port
